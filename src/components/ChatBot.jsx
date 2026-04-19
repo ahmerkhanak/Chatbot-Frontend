@@ -10,6 +10,10 @@ const suggestions = [
   "New Project"
 ];
 
+const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:5000' 
+  : 'https://chatbot-backend-snowy-one.vercel.app';
+
 function ChatBot() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
@@ -21,6 +25,8 @@ function ChatBot() {
   const [showMenu, setShowMenu] = useState(false);
   const [theme, setTheme] = useState('dark');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState(null);
 
   useEffect(() => {
     fetchChats();
@@ -38,7 +44,7 @@ function ChatBot() {
   const fetchChats = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('https://chatbot-backend-snowy-one.vercel.app/api/chats', {
+      const res = await fetch(`${API_BASE_URL}/api/chats`, {
         headers: { 'x-auth-token': token }
       });
       const data = await res.json();
@@ -54,7 +60,7 @@ function ChatBot() {
     setShowSuggestions(false);
     setMessages([]);
     try {
-      const res = await fetch(`https://chatbot-backend-snowy-one.vercel.app/api/chats/${chatId}/messages`, {
+      const res = await fetch(`${API_BASE_URL}/api/chats/${chatId}/messages`, {
         headers: { 'x-auth-token': token }
       });
       const data = await res.json();
@@ -83,7 +89,7 @@ function ChatBot() {
     const token = localStorage.getItem('token');
 
     try {
-      const response = await fetch('https://chatbot-backend-snowy-one.vercel.app/chat', {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,6 +110,37 @@ function ChatBot() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteChat = (e, chatId) => {
+    e.stopPropagation();
+    setChatToDelete(chatId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!chatToDelete) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chats/${chatToDelete}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        setChats(prev => prev.filter(c => c._id !== chatToDelete));
+        if (activeChatId === chatToDelete) {
+          setActiveChatId(null);
+          setMessages([]);
+          setShowSuggestions(true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+    } finally {
+      setShowDeleteModal(false);
+      setChatToDelete(null);
     }
   };
 
@@ -134,13 +171,20 @@ function ChatBot() {
         </div>
         <div className="sidebar-chats">
           {chats.map(chat => (
-            <button
+            <div
               key={chat._id}
-              className={`sidebar-chat-item ${activeChatId === chat._id ? 'active' : ''}`}
+              className={`sidebar-chat-item-wrapper ${activeChatId === chat._id ? 'active' : ''}`}
               onClick={() => loadChat(chat._id)}
             >
-              {chat.title}
-            </button>
+              <span className="chat-title">{chat.title}</span>
+              <button 
+                className="delete-chat-btn" 
+                onClick={(e) => deleteChat(e, chat._id)}
+                title="Delete Chat"
+              >
+                ✕
+              </button>
+            </div>
           ))}
         </div>
         <div className="sidebar-footer">
@@ -236,6 +280,27 @@ function ChatBot() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="modal-overlay">
+            <motion.div 
+              className="modal-content"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            >
+              <h3>Delete Chat?</h3>
+              <p>This will permanently remove this conversation and all its messages.</p>
+              <div className="modal-actions">
+                <button className="modal-btn secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
+                <button className="modal-btn primary danger" onClick={confirmDelete}>Delete</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
